@@ -583,9 +583,7 @@ io.on('connection', async (socket) => {
             final_round = 0
           socket.on('create_room', function(event, callbackFn){
             shuffled = [...newThemes].sort(() => 0.5 - Math.random())
-            console.log('shuffled ', shuffled.slice(0, 4))           
             activeLink = makeid(8);
-            console.log('create_room ', event)
             let creator;
             rooms.forEach(function (el, i)  {
               if(el.player === socket.id) creator = el.username
@@ -593,7 +591,7 @@ io.on('connection', async (socket) => {
             let room = {
               link: activeLink, creator: creator, creator_id: socket.id, 
               amount: event.amount, theme: [], room: [], answers: [], shuffled: shuffled, max: 0,
-              final_round_ansers: [[], [], [], [], [], []]
+              question: {}, final_round_ansers: [[], [], [], [], [], []]
             }
             rooms.push(room)
             callbackFn(room)
@@ -608,7 +606,6 @@ io.on('connection', async (socket) => {
             console.log('start_game ', activeLink)
             rooms.forEach(function (el, i)  {
               if(event.link === el.link) {
-                console.log('el.room ', el.room)
                 el.room.map((item) => {
                   socket.to(item.player).emit('game_started');
                   callbackFn('start_game')
@@ -621,7 +618,6 @@ io.on('connection', async (socket) => {
             console.log('request_players ', event.link)
             rooms.forEach(function (el)  {
               if(event.link === el.link) {
-                console.log('el ', el)
                 callbackFn({room: el.room, amount: el.amount})
               }
             })
@@ -630,10 +626,8 @@ io.on('connection', async (socket) => {
           
             socket.on('join_game', function(event){
               activeLink = event.link;
-              console.log('join_game ', event.link, username)
               rooms.forEach(function (el, i)  {
                   if(event.link === el.link) {
-                    console.log('el.creator_id ', el.creator_id)
                     const player = el.room.find(o => o.username === username );
                     if(player) console.log('player exist') 
                     else{ 
@@ -666,33 +660,30 @@ io.on('connection', async (socket) => {
                 // })
               });
 
-              let question = {}
               const time = 15000
               socket.on('receive_themes', function(callbackFn){
-                console.log('receive_themes ', activeLink)
                 rooms.forEach(function (el, i)  {
                   if(activeLink === el.link) {
+                    el.max = 0
                     callbackFn({themes: el.shuffled.slice(0, 4), time: 10000})
                   }
                 })
                 let arr = []
                 setTimeout(() => {
-                  console.log('themes ', shuffled)
                   rooms.forEach(function (el, i)  {
-                    if(activeLink === el.link) {
+                    if(activeLink === el.link&&socket.id === el.creator_id) {
+                      console.log('el.shuffled ', el.shuffled, socket.id, el.creator_id)
                       el.shuffled.forEach((item, i) => {
                         arr.push(item.value)
+                        item.value = 0
                       })
                       el.max = arr.indexOf(Math.max(...arr))
-                      if(question = el.shuffled[el.max].questions){
-                        question = el.shuffled[el.max]?.questions[Math.floor(Math.random() * el.shuffled[el.max].questions.length)]
+                      console.log('el.max ', el.max)
+                      if(el.shuffled[el.max].questions){
+                        el.question = el.shuffled[el.max]?.questions[Math.floor(Math.random() * el.shuffled[el.max].questions.length)]
                       }
-                      socket.emit(`theme_chosen_${activeLink}`, {max: el.max})
-                      console.log(`el.shuffled `, el.shuffled)
-                      console.log(`max `, el.max)
-                      console.log(`el.shuffled[max] `, el.shuffled?.[el.max])
+                      io.emit(`theme_chosen_${activeLink}`, {max: el.max})
                       newThemes = newThemes.filter(el => el !== el.shuffled?.[el.max]);
-                      console.log('themes1 ', newThemes)
                       el.shuffled = [...newThemes].sort(() => 0.5 - Math.random());
                     }
                   })
@@ -700,12 +691,9 @@ io.on('connection', async (socket) => {
               })
 
               socket.on('choose_theme', function(event, callbackFn){
-                console.log('choose_theme ', event)
                 let allowChoose = true
                 rooms.map(function (el, i)  {
                   if(activeLink === el.link) {
-                    console.log('el.theme ', el.theme)
-                    console.log('el.theme1 ', username, tour, round)
                     if(el.theme.find(o => o.username === username&&o.tour === tour&&o.round === round)){
                       allowChoose = false
                     }
@@ -721,7 +709,10 @@ io.on('connection', async (socket) => {
               
               socket.on('get_questions', function(callbackFn){
                 console.log('time ', time)
-                callbackFn({questions: question, time: time})
+                rooms.map(function (el, i)  {
+                  if(activeLink === el.link) callbackFn({questions: el.question, time: time})
+                })
+                
                 setTimeout(() => {
                   round = round + 1
                   if(round === 3) {
@@ -732,6 +723,7 @@ io.on('connection', async (socket) => {
 
                 }, 15000)
               })  
+
               let theme = 0
               
               function setPoint(arr){
@@ -762,19 +754,20 @@ io.on('connection', async (socket) => {
               }
               
               socket.on(`give_answer_quiz`, function(event, callbackFn){
-                if(question.answers[event.index].correct){
-                  console.log('give answer', socket.id)
-                  setPoint(rooms)
-                }
-                let allowAnswer = true
                 rooms.map(el => {
                   if(activeLink === el.link){
+                    if(el.question.answers[event.index].correct){
+                      console.log('give answer', socket.id)
+                      setPoint(rooms)
+                    }
+                    let allowAnswer = true
+
                     if(el.answers.find(o => o.username === username&&o.tour === tour&&o.round === round)){
                       allowAnswer = false
                     }
                     if(allowAnswer||el.answers.length===0){
                       el.answers.push({username: username, tour: tour, round: round})  
-                      callbackFn(question.answers[event.index].correct)
+                      callbackFn(el.question.answers[event.index].correct)
                     }
                   }
                 })              
