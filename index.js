@@ -15,7 +15,7 @@ var corsOptions = {
   origin: "*"
 };
 
-mongoose.connect("mongodb+srv://VictorSoltan:Password1!@cluster0.dc7dp.mongodb.net/myFirstDatabase?retryWrites=true&w=majority", (err) => {
+mongoose.connect("", (err) => {
   if(!err) console.log('db connected')
   else console.log(err)
 })
